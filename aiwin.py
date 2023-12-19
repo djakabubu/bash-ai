@@ -12,8 +12,29 @@ import argparse
 import re
 from collections import OrderedDict
 
-VERSION = "0.3.0"
-CACHE_FOLDER = "~/.cache/bashai"
+SELECTED_LANGUAGE = "it"
+
+
+
+
+VERSION = "0.0.1"
+#CACHE_FOLDER è il percorso della cartella utente .cache
+CACHE_FOLDER = os.path.join(os.path.expanduser("~"), ".cache", "shellai")
+#CONFIG_FOLDER è il percorso della cartella utente .config
+CONFIG_FOLDER = os.path.join(os.path.expanduser("~"), ".config", "shellai")
+#openai è il file di configurazione openai dentro la cartella CONFIG_FOLDER
+CONFIG_FILE = os.path.join(CONFIG_FOLDER, "openai")
+
+#CHAT_SYSTEM_PROMPT è il prompt di sistema per l'assistente usando la chat completion
+CHAT_SYSTEM_PROMPT="You are a helpful assistant. Answer as concisely as possible. This machine is running Windows %s."
+
+
+#CHAT_COMPLETION_MODEL è il modello di completamento per l'assistente usando la chat completion
+CHAT_COMPLETION_MODEL="gpt-3.5-turbo"
+#CODE_COMPLETION_MODEL è il modello di completamento per l'assistente usando la chat completion
+CODE_COMPLETION_MODEL="gpt-3.5-turbo-instruct"
+#CODE_COMPLETION_PROMPT è il prompt di sistema per l'assistente usando la completion
+CODE_COMPLETION_PROMPT=f"Running on Windows like %s. Answer with single cmd command on powershell to execute request: E.g. User: What is the command to list all folders? Assistant: dir . User:  %s\n %s\n Assistant:"
 
 def cache(maxsize=128):
     def decorator(func):
@@ -54,22 +75,65 @@ def cache(maxsize=128):
         return wrapper
     return decorator
 
+'''def language_cache(maxsize=1024):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            # Bypass the cache if env var is set
+            if os.environ.get("NOCACHE"):
+                return func(*args, **kwargs)
+            key = str(args) + str(kwargs)
+
+            # create the cache directory if it doesn't exist
+            if not os.path.exists(os.path.join(os.path.expanduser(CACHE_FOLDER), SELECTED_LANGUAGE)):
+                os.mkdir(os.path.join(os.path.expanduser(CACHE_FOLDER), SELECTED_LANGUAGE))
+
+            # load the cache
+            try:
+                cache_folder = os.path.expanduser(CACHE_FOLDER)
+                with open(os.path.join(cache_folder, SELECTED_LANGUAGE,"language_cache.pkl"), "rb") as f:
+                    cache = pickle.load(f)
+            except (FileNotFoundError, EOFError):
+                cache = OrderedDict()
+
+            if not isinstance(cache, OrderedDict):
+                cache = OrderedDict()
+
+            if key in cache:
+                return cache[key]
+            else:
+                result = func(*args, **kwargs)
+                if len(cache) >= maxsize:
+                    # remove the oldest entry
+                    cache.popitem(last=False)
+
+                cache[key] = result
+                cache_folder = os.path.expanduser(CACHE_FOLDER)
+                with open(os.path.join(cache_folder, SELECTED_LANGUAGE,"language_cache.pkl"), "wb") as f:
+                    pickle.dump(cache, f)
+                return result
+        return wrapper
+    return decorator
+
+@language_cache()'''
+def AutoTranslate(text):    
+    return text
+
 def get_api_key():
     # load the api key from .config/openai
-    if os.path.exists(os.path.expanduser("~/.config/openai")):
-        with open(os.path.expanduser("~/.config/openai")) as f:
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE) as f:
             openai.api_key = f.read().strip()
     else:
-        print("No api key found. Please create a file ~/.config/openai with your api key in it.")
+        print(AutoTranslate("No api key found. Please create a file ~/.config/openai with your api key in it."))
         # ask for key and store it
-        openai.api_key = input("Please enter your api key: ")
+        openai.api_key = input(AutoTranslate("Please enter your api key: "))
         if openai.api_key == "":
-            print("No api key provided. Exiting.")
+            print(AutoTranslate("No api key provided. Exiting."))
             sys.exit(1)
         # make sure the directory exists
-        if not os.path.exists(os.path.expanduser("~/.config")):
-            os.mkdir(os.path.expanduser("~/.config"))
-        with open(os.path.expanduser("~/.config/openai"), "w") as f:
+        if not os.path.exists(CONFIG_FOLDER):
+            os.mkdir(CONFIG_FOLDER)
+        with open(CONFIG_FILE, "w") as f:
             f.write(openai.api_key)
 
 def get_context_files():
@@ -77,70 +141,71 @@ def get_context_files():
     context_prompt = ""
     # add the current folder to the prompt
     if len(context_files) > 0:
-        context_prompt = "The command is executed in folder %s contining the following list of files:\n" % (os.getcwd())
+        context_prompt = AutoTranslate("The command is executed in folder %s contining the following list of files:\n" % (os.getcwd()))
         # add the files to the prompt
         context_prompt += "\n".join(context_files)
     return context_prompt
 
 def get_context_process_list():
     context_prompt = ""
-    # list all processes
-    process_list = subprocess.check_output(["ps", "-A", "-o", "pid,ppid,cmd"]).decode("utf-8")
-    context_prompt += "The following processes are running: %s\n" % process_list
+    # lista i processi attivi in windows
+    process_list = subprocess.check_output(["powershell", "Get-Process"]).decode("utf-8")   
+    context_prompt += AutoTranslate("The following processes are running: %s\n" % process_list)
     return context_prompt
 
 def get_context_env():
     context_prompt = ""
-    # list all environment variables
-    env = os.environ
-    context_prompt += "The following environment variables are set: %s\n" % env
+    # list all environment variables in windows
+    env = subprocess.check_output(["powershell", "Get-ChildItem env:"]).decode("utf-8")
+    context_prompt += AutoTranslate("The following environment variables are set: %s\n" % env)
     return context_prompt
 
 def get_context_users():
     context_prompt = ""
-    # list all users
-    users = subprocess.check_output(["getent", "passwd"]).decode("utf-8")
-    context_prompt += "The following users are defined: %s\n" % users
+    # list all users in windows
+    users = subprocess.check_output(["powershell", "Get-LocalUser"]).decode("utf-8")    
+    context_prompt += AutoTranslate("The following users are defined: %s\n" % users)
     return context_prompt
 
 def get_context_groups():
     context_prompt = ""
-    # list all groups
-    groups = subprocess.check_output(["getent", "group"]).decode("utf-8")
-    context_prompt += "The following groups are defined: %s\n" % groups
+    # list all groups in windows
+    groups = subprocess.check_output(["powershell", "Get-LocalGroup"]).decode("utf-8")
+    context_prompt += AutoTranslate("The following groups are defined: %s\n" % groups)
     return context_prompt
 
 def get_context_network_interfaces():
     context_prompt = ""
-    # list all network interfaces
+    # list all network interfaces in windows
     interfaces = subprocess.check_output(["ip", "link"]).decode("utf-8")
-    context_prompt += "The following network interfaces are defined: %s\n" % interfaces
+    context_prompt += AutoTranslate("The following network interfaces are defined: %s\n" % interfaces)
     return context_prompt
 
 def get_context_network_routes():
     context_prompt = ""
-    # list all network interfaces
+    # list all network interfaces in windows
     routes = subprocess.check_output(["ip", "route"]).decode("utf-8")
-    context_prompt += "The following network routes are defined: %s\n" % routes
+    context_prompt += AutoTranslate("The following network routes are defined: %s\n" % routes)
     return context_prompt
 
 def get_context_iptables():
     context_prompt = ""
-    # list all iptables rules
-    iptables = subprocess.check_output(["sudo", "iptables", "-L"]).decode("utf-8")
-    context_prompt += "The following iptables rules are defined: %s\n" % iptables
+    # list all iptables rules in windows
+    iptables = subprocess.check_output(["iptables", "-L"]).decode("utf-8")
+    context_prompt += AutoTranslate("The following iptables rules are defined: %s\n" % iptables)
     return context_prompt
 
 
+
 CONTEXT = [
-    {"name": "List of files in the current directory", "function": get_context_files},
-    {"name": "List of processes", "function": get_context_process_list},
-    # {"name": "List of environment variables", "function": get_context_env}, # This looks like a security issue
-    {"name": "List of users", "function": get_context_users},
-    {"name": "List of groups", "function": get_context_groups},
-    {"name": "List of network interfaces", "function": get_context_network_interfaces},
-    {"name": "List of network routes", "function": get_context_network_routes},
-    {"name": "List of iptables rules", "function": get_context_iptables},
+    {"name": AutoTranslate("List of files in the current directory"), "function": get_context_files},
+    {"name": AutoTranslate("List of processes"), "function": get_context_process_list},
+    #{"name": "List of environment variables", "function": get_context_env}, # This looks like a security issue
+    {"name": AutoTranslate("List of users"), "function": get_context_users},
+    {"name": AutoTranslate("List of groups"), "function": get_context_groups},
+    {"name": AutoTranslate("List of network interfaces"), "function": get_context_network_interfaces},
+    {"name": AutoTranslate("List of network routes"), "function": get_context_network_routes},
+    {"name": AutoTranslate("List of iptables rules"), "function": get_context_iptables},
 ]
 
 
@@ -193,10 +258,10 @@ def chat(prompt):
 
     if len(history) == 0 or len([h for h in history if h["role"] == "system"]) == 0:
         distribution = distro.name()
-        history.append({"role": "system", "content": "You are a helpful assistant. Answer as concisely as possible. This machine is running Linux %s." % distribution})
+        history.append({"role": "system", "content": CHAT_SYSTEM_PROMPT % distribution})
 
     history.append({"role": "user", "content": prompt})
-    response = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=history)
+    response = openai.ChatCompletion.create(model=CHAT_COMPLETION_MODEL, messages=history)
     content = response.get("choices")[0].message.content
     # trim the content
     content = content.strip()
@@ -210,8 +275,8 @@ def get_cmd(prompt, context_prompt=""):
     distribution = distro.like()
 
     response = openai.Completion.create(
-        engine="gpt-3.5-turbo-instruct",
-        prompt="Running on Linux like %s. %s\nSingle bash command to %s\n" % (distribution, context_prompt, prompt),
+        engine=CODE_COMPLETION_MODEL,
+        prompt=CODE_COMPLETION_PROMPT % (distribution, context_prompt, prompt),
         temperature=0,
         max_tokens=100,
         top_p=1,
@@ -226,12 +291,17 @@ def get_cmd(prompt, context_prompt=""):
 def get_cmd_list(prompt, context_files=[], n=5):
     # add info about the system to the prompt. E.g. ubuntu, arch, etc.
     distribution = distro.like()
-    context_prompt = get_context_files(context_files)                        
+    #se context_files ha elementi
+    if len(context_files) > 0:
+        context_prompt = get_context_files()
+    else:
+        context_prompt = ""                       
+                         
 
 
     response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt="Running on Linux like %s. %s\n Generate a single bash command to %s\n" % (distribution, context_prompt, prompt),
+        engine=CODE_COMPLETION_MODEL,
+        prompt=AutoTranslate(CODE_COMPLETION_PROMPT % (distribution, context_prompt, prompt)),
         temperature=0.9,
         max_tokens=50,
         top_p=1,
@@ -249,10 +319,10 @@ def get_needed_context(cmd):
     for i in range(len(CONTEXT)):
         context_list += "%s ) %s\n" % (i, CONTEXT[i]["name"])
 
-    prompt = "If you need to generate a signle bash command to %s, which of this context you need:\n%s\n Your output is a number.\n If none of the above context is usefull the output is -1.\n" % (cmd, context_list)
+    prompt = AutoTranslate("If you need to generate a signle bash command to %s, which of this context you need:\n%s\n Your output is a number.\n If none of the above context is usefull the output is -1.\n" % (cmd, context_list))
 
     response = openai.Completion.create(
-        engine="text-davinci-003",
+        engine=CODE_COMPLETION_MODEL,
         prompt=prompt,
         temperature=0,
         max_tokens=4,
@@ -272,8 +342,8 @@ def get_needed_context(cmd):
 @cache()
 def get_explaination(cmd):
     response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt="Explain what is the purpose of command with details for each option: %s \n" % cmd,
+        engine=CODE_COMPLETION_MODEL,
+        prompt=AutoTranslate("Explain what is the purpose of command with details for each option: %s \n" % cmd),
         temperature=0,
         max_tokens=250,
         top_p=1,
@@ -416,13 +486,9 @@ if __name__ == "__main__":
             print("No command executed.")
             sys.exit(1)
 
-    # retrieve the shell
-    shell = os.environ.get("SHELL")
-    # if no shell is set, use bash
-    if shell is None:
-        shell = "/bin/bash"
+  
 
-    if not os.environ.get("NOHISTORY"):
+    '''if not os.environ.get("NOHISTORY"):
         # retrieve the history file of the shell depending on the shell
         if shell == "/bin/bash":
             history_file = os.path.expanduser("~/.bash_history")
@@ -439,11 +505,18 @@ if __name__ == "__main__":
         if history_file is not None:
             with open(history_file, "a") as f:
                 f.write(cmd + "\n")        
-            print("History saved.")
+            print("History saved.")'''
 
-    # Execute the command in the current shell (bash, zsh, fish, etc.)
-    subprocess.call(cmd, shell=True, executable=shell)
+    # esegui il comando contenuto in cmd nella console dos
+    print("Executing command: %s" % cmd)
+    # esegui il comando
 
+    try:
+        risultato = subprocess.check_output(cmd, shell=True,  text=True)
+        print("Output del comando:")
+        print(risultato)
+    except subprocess.CalledProcessError as e:
+        print(f"Errore durante l'esecuzione del comando: {e}")
 
 
 
