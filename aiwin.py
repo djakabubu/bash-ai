@@ -1,6 +1,3 @@
-#! /bin/env python3
-# -*- coding: utf-8 -*-
-
 import sys
 import os
 import openai
@@ -11,6 +8,7 @@ import subprocess
 import argparse
 import re
 from collections import OrderedDict
+import shutil
 
 SELECTED_LANGUAGE = "it"
 
@@ -319,7 +317,7 @@ def get_needed_context(cmd):
     for i in range(len(CONTEXT)):
         context_list += "%s ) %s\n" % (i, CONTEXT[i]["name"])
 
-    prompt = AutoTranslate("If you need to generate a signle bash command to %s, which of this context you need:\n%s\n Your output is a number.\n If none of the above context is usefull the output is -1.\n" % (cmd, context_list))
+    prompt = AutoTranslate("If you need to generate a single bash command to %s, which of this context you need:\n%s\n Your output is a number.\n If none of the above context is usefull the output is -1.\n" % (cmd, context_list))
 
     response = openai.Completion.create(
         engine=CODE_COMPLETION_MODEL,
@@ -361,13 +359,14 @@ def highlight(cmd, explanation):
         #escape the special characters
         x_strip = re.escape(x_strip)
 
-        explanation = re.sub("([\s'\"`\.,;:])%s([\s'\"`\.,;:])" % x_strip, "\\1%s\\2" % x_replace, explanation)
+        explanation = re.sub(r"([\s'\"`\.,;:])%s([\s'\"`\.,;:])" % x_strip, "\\1%s\\2" % x_replace, explanation)
     return explanation
 
 
 def square_text(text):
     #retrieve the terminal size using library
-    columns, lines = os.get_terminal_size(0)
+   
+    columns, lines = shutil.get_terminal_size(0)
 
     # set mono spaced font
     out = "\033[10m"        
@@ -382,10 +381,10 @@ def square_text(text):
     
 def print_explaination(cmd):    
     explaination = get_explaination(cmd)
-    h_explaination = highlight(cmd, square_text(explaination.strip()))
+    #h_explaination = highlight(cmd, square_text(explaination.strip()))
     print("-" * 27)
     print("| *** \033[1;31m Explaination: \033[0m *** |")
-    print(h_explaination)
+    print(explaination)
     print("")
 
 
@@ -479,12 +478,12 @@ if __name__ == "__main__":
 
             index += 1
 
-        choice = input("Do you want to execute one of these commands? [0-%d] " % (index-1))
+        choice = input("Do you want to execute one of these commands? (n=no) [0-%d] " % (index-1))
         if choice.isdigit() and int(choice) < index:
             cmd = cmds[int(choice)]
         else:
             print("No command executed.")
-            sys.exit(1)
+            sys.exit(0)
 
   
 

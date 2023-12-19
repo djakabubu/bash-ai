@@ -11,7 +11,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["Mostrami le cartelle e solo le cartelle in C:"]
+            "args": ["-c","Sposta questi files in c:\\temp"]
         }
     ]
 }
